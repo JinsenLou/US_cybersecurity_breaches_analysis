@@ -1,0 +1,84 @@
+#!/bin/bash
+
+#Author: Jinsen Lou, Student number: 23737198
+# This script takes in two arguments: a TSV file containing cyber security breaches data, and a command specifying what to do with the data
+# The possible commands are:
+# - maxstate: Find the state with the largest number of incidents
+# - maxyear in 4 digits: Find the year with the largest number of incidents
+# - <state_code> in 2 capital letters: Find the year with the maximum number of incidents for the specified state (e.g. CA)
+# - <year>: Find the state with the maximum number of incidents for the specified year (e.g. 2010)
+# It also handles gracefully the errors and export them to different standard errors.
+
+
+# Check the correct number of arguments were provided. If it's not equal to 2, then export it to the standard error and exit
+if [[ $# -ne 2 ]]
+then
+  echo "Usage: $0 <file> <command>"
+  echo "Commands: maxstate, maxyear, <state_code>, <year>"
+  > /dev/stderr
+  exit 1
+fi
+
+# Assign the arguments to variables
+file=$1
+# Make the command case-insensitive, except when it is a state code which consists of two uppercase letters
+if [[ ${#2} -eq 2 ]] 
+then
+  command=$2
+else
+  command=$(echo $2 | tr [A-Z] [a-z])
+fi
+
+# Check that the file exits and is not 0 length. If not export it to the standard error and exit
+if [[ ! -s $file ]]
+then
+  echo "Error: $file does not exist or it is empty."
+  > /dev/stderr
+  exit 2
+fi
+
+# Perform different command according to the different second argumant/command
+case $command in
+  maxstate)
+      # Find the state with the largest number of incidents
+      state_count=$(cut -f2 $file | sort | uniq -c | sort -nr | head -n1)
+      state=$(echo $state_count | awk '{print $2}')
+      count=$(echo $state_count | awk '{print $1}')
+      echo "State with greatest number of incidents is: $state with count $count"
+      ;;
+  maxyear)
+      # Find the year with the largest number of incidents
+      year_count=$(cut -f8 $file | sort | uniq -c | sort -nr | head -n1)
+      year=$(echo $year_count | awk '{print $2}')
+      count=$(echo $year_count | awk '{print $1}')
+      echo "Year with greatest number of incidents is: $year with count $count"
+      ;;
+  [A-Za-z][A-Za-z])
+      # Find the year with the maximum number of incidents for the specified state
+      state=$command
+      year_count=$(grep -i $state $file | cut -f8 | sort | uniq -c | sort -nr | head -n1)
+      year=$(echo $year_count | awk '{print $2}')
+      count=$(echo $year_count | awk '{print $1}')
+      echo "State with greatest number of incidents for $state is in $year with count $count"
+      ;;
+  [0-9][0-9][0-9][0-9])
+      # Find the state with the maximum number of incidents for the specified year
+      year=$command
+      state_count=$(grep $year $file | cut -f2 | sort | uniq -c | sort -nr | head -n1)
+      state=$(echo $state_count | awk '{print $2}')
+      count=$(echo $state_count | awk '{print $1}')
+      echo "Year with greatest number of incidents for $year is in $state with count $count"
+      ;;
+  max*)
+      # If the second argument starts with max but not end with state or year
+      echo "The max commands are either maxstate or maxyear" > /dev/stderr
+      exit 3
+      ;;
+  *)
+      # If the second argument is any other invalid command
+      echo "Error: invalid command. Must be maxstate, maxyear, a two-letter state code, or a four-digit year."
+      > /dev/stderr
+      exit 3
+      ;;
+esac
+
