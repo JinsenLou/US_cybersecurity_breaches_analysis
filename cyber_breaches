@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#Author: Jinsen Lou, Student number: 23737198
+#Author: Jinsen Lou
 # This script takes in two arguments: a TSV file containing cyber security breaches data, and a command specifying what to do with the data
 # The possible commands are:
 # - maxstate: Find the state with the largest number of incidents
