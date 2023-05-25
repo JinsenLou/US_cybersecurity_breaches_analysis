@@ -1,0 +1,87 @@
+#!/bin/bash
+
+##########################################################
+# This script takes a file as input and performs various operations to analyze cyber security breaches data.
+# It calculates the total number of incidents per month, the median of incidents and 
+# the median absolute deviation (MAD), compares each month's incidents to the sum and difference of median and MAD, 
+# The preprocessing steps are performed using a series of `awk` commands, some connected by pipes (`|`),
+# and some using intermediate files.
+
+# Check the number of argument
+if [[ $# -ne 1 ]]
+then
+  echo "The argument must be at leat and only one, please provide a file name here."
+  >/dev/stderr
+  exit 1
+fi
+
+# Check that the file exits and is not 0 length. If not export it to the standard error and exit
+if [[ ! -s $1 ]]
+then
+  echo "Error: $file does not exist or it is empty."
+  > /dev/stderr
+  exit 1
+fi
+
+# Counting the total number of incidents per month, each row means one incident
+awk 'BEGIN {FS="\t"} 
+    {if ($6 != "" && $3 != "") 
+    {total[$6] += 1}} 
+    END {for (month=1; month<=12; month++) 
+    {printf "%s\t%d\n", month, total[month]}}' "$1" > month_incidents
+
+# Calculate the median of incidents for the 12 month by firstly sort them
+sort -n -k 2 month_incidents > sorted_month_incidents
+median=$(awk 'BEGIN {FS="\t"}
+    {if (NR == 6 || NR == 7)
+    {total += $2}}
+    END {printf ("%.2f", total/2)}' sorted_month_incidents)
+
+# Calculate the absolute deviations (abs value of the difference between median and the incidents from month_incidents
+# add it in the end of each each row after month_incidents 
+awk -v median="$median" 'BEGIN {FS="\t"} 
+    {abs_dev = ($2 > median) ? ($2 - median) : (median - $2);
+     printf ("%s\t%d\t%.2f\n", $1, $2, abs_dev)}' month_incidents | sort -n -k 3 > sorted_month_incidents_abs_dev
+
+# Calculate the median absolute deviation (MAD)
+MAD=$(awk 'BEGIN {FS="\t"}
+    {if (NR == 6 || NR == 7)
+    {total += $3}}
+    END {printf ("%.2f", total/2)}' sorted_month_incidents_abs_dev)
+
+
+# Caculate the sum of median and MAD and the difference,
+# Compare each month's incidents to the sum and the difference
+awk -v median="$median" -v MAD="$MAD" 'BEGIN {FS="\t"} 
+    { 
+      sum_median_mad = median + MAD
+      diff_median_mad = median - MAD
+
+      if ($2 >= sum_median_mad) {
+        indicator = "++"
+      } else if ($2 <= diff_median_mad) {
+        indicator = "--"
+      } else {
+        indicator = ""
+      }
+      printf("%s\t%d\t%s\n", $1, $2, indicator)
+    }' month_incidents | # Pipe to the next awk program for transforming month number to name
+
+# Transform the month number with the corresponding name
+awk -v median="$median" -v MAD="$MAD" 'BEGIN {FS=OFS="\t";
+    printf "%s\t%.2f\n", "The median is", median;
+    printf "%s\t%.2f\n", "The MAD is", MAD;
+    printf "%-6s%-10s%-10s\n", "Month", "Incidents", "Indicator";;
+    months = "Jan/Feb/Mar/Apr/May/Jun/Jul/Aug/Sep/Oct/Nov/Dec";
+    split(months, month_arr, "/")}
+    {
+      month_num = $1;
+      breaches = $2;
+      status = $3;
+
+      # Convert month number to name
+      month_name = month_arr[month_num];
+
+      # Print the transformed data
+      printf "%s\t%d\t%s\n", month_name, breaches, status;
+    }' 
