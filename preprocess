@@ -1,0 +1,76 @@
+#!/bin/bash
+
+##########################################################
+# This script performs preprocessing on a file containing cyber security breaches data.
+# It cleans the data, adds a month and year column, removes irrelevant information, and filters rows with invalid values.
+# The preprocessing steps are performed using a series of `awk` commands connected by pipes (`|`).
+
+# Check the number of argument
+if [[ $# -ne 1 ]]
+then
+  echo "The argument must be at least and only one, please provide a file name here."
+  >/dev/stderr
+  exit 1
+fi
+
+# Check that the file exits and is not 0 length. If not export it to the standard error and exit
+if [[ ! -s $1 ]]
+then
+  echo "Error: $file does not exist or it is empty."
+  > /dev/stderr
+  exit 1
+fi
+
+# Drop the location of breached information and summary columns and delete the old header
+cut -f 1-5 "$1" | sed 1d  |
+
+#Add a month column and a year field in the end 
+awk 'BEGIN {FS=OFS="\t"
+    print "Name_of_Covered_Entity\tState\tIndividuals_Affected\tDate_of_Breach\tType_of_Breach\tMonth\tYear"} # Add a new header
+{
+    if ($4 ~ /-/) {
+      split($4, dates, "-") # If the date column has start date and a end date with a hypen "-", use the satrt date
+      start_date = dates[1]
+      split(start_date, date_arr, "/")
+    } else {
+        split($4, date_arr, "/")
+    }
+
+    month = date_arr[1]
+    if (month ~ /^0[0-9]$/) { # If the month starts with 0 and is followed by a single digit
+        month = substr(month, 2) # Extract the second digit
+    }
+    year = date_arr[3]
+    if (length(year) == 2 ){ # If the year is only 2 digits long
+      if (year < 23){ # If the 2 digits value is less than 23(this year 2023), then it is 21st century, add 20 in front
+        year = "20" year
+      }
+      else{
+        year = "19" year # Else, it is the 20 century, add 19 in front
+      }
+    }
+    gsub(/[[:space:]]+$/, "", month); # To eleminate the unusful white space
+    gsub(/[[:space:]]+$/, "", year); 
+    print $0, month, year
+}' |
+
+
+# Remove everything in the Type of Breach field after the first comma or slash
+awk 'BEGIN{FS=OFS="\t"} 
+    {sub(/[\,\/].*/, "", $5);
+    gsub(/[[:space:]]+$/, "", $5); 
+    print}' | 
+
+
+# This part is to check every column if it has invalid value and keep those rows with valid values 
+awk 'BEGIN{FS=OFS="\t"
+    # Define a regular expression to match valid US state abbreviations 
+    state_regex="^(AL|AK|AS|AZ|AR|CA|CO|CT|DE|DC|FM|FL|GA|GU|HI|ID|IL|IN|IA|KS|KY|LA|ME|MH|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|MP|OH|OK|OR|PW|PA|PR|RI|SC|SD|TN|TX|UT|VT|VI|VA|WA|WV|WI|WY)$"
+    
+    # Define a regular expression to match valid individual affected values
+    individuals_regex="^[1-9][0-9]*$"}
+    
+    # Check for invalid state values and only keep the rows with valid values:
+    # Except the state code and individual numbers mentioned before, 
+    # The month needs to be between 1-12
+    { if (NR==1 || (($2 ~ state_regex) && ($3 ~ individuals_regex) && ($6 >= 1 && $6 <= 12))) { print } }'
